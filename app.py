@@ -81,7 +81,7 @@ if wav is not None:
     features = np.mean(emb.numpy(), axis=0).reshape(1,-1)
 
     # 1️⃣ Binary model
-    binary_prob = float(binary_model.predict(features)[0][0])
+    binary_prob = float(binary_model.predict(scaler.transform(features))[0][0])
 
     st.subheader("🫁 Diagnosis")
 

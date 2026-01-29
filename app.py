@@ -86,12 +86,21 @@ if wav is not None:
 
     sev_map = ["Mild","Moderate","Severe"]
 
-    st.subheader("🫁 COPD Status")
-    st.write("**COPD Detected**")
+   st.subheader("🫁 Diagnosis")
 
-    st.subheader("📊 Severity")
-    st.write(sev_map[sev])
-    st.write(f"Confidence: {confidence*100:.1f}%")
+    if sev == 0 and confidence < 0.6:
+        st.success("Healthy lungs detected")
+        st.write("No significant COPD pattern found")
+        st.write(f"Confidence: {confidence*100:.1f}%")
+        st.session_state["copd_stage"] = None
+
+    else:
+        st.error("COPD Detected")
+        st.subheader("📊 Severity")
+        st.write(sev_map[sev])
+        st.write(f"Confidence: {confidence*100:.1f}%")
+        st.session_state["copd_stage"] = sev
+
 
     if confidence < 0.6:
         st.warning("Low confidence – please re-record lung sound")

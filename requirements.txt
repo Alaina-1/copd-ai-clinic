@@ -1,8 +1,8 @@
 streamlit
-numpy
-pandas
-librosa
-soundfile
 tensorflow
 tensorflow-hub
+librosa
+numpy
 scikit-learn
+pandas
+soundfile

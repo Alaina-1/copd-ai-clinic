@@ -6,6 +6,8 @@ import pickle
 import tensorflow_hub as hub
 
 st.set_page_config(page_title="AYURON", layout="centered")
+st.write("Scaler expects:", scaler.n_features_in_)
+st.write("Binary model expects:", binary_model.input_shape[1])
 
 # -------------------------------
 # Load Models

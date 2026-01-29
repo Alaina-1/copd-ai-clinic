@@ -5,8 +5,12 @@ import tensorflow as tf
 import pickle
 import tensorflow_hub as hub
 
-def ayurveda_recommendation(prakriti, copd_stage):
+st.set_page_config(page_title="AI COPD & Ayurveda", layout="centered")
 
+# ===============================
+# 🌿 AYURVEDA ENGINE
+# ===============================
+def ayurveda_recommendation(prakriti, copd_stage):
     rec = {}
 
     if "Kapha" in prakriti:
@@ -37,67 +41,67 @@ def ayurveda_recommendation(prakriti, copd_stage):
 
     return rec
 
-# Load models
-binary_model = tf.keras.models.load_model("copd_binary_model.h5")
-severity_model = tf.keras.models.load_model("copd_severity_model.h5")
+# ===============================
+# 🧠 LOAD MODELS (CACHED)
+# ===============================
+@st.cache_resource
+def load_models():
+    severity_model = tf.keras.models.load_model("copd_severity_model.h5")
+    yamnet = hub.load("https://tfhub.dev/google/yamnet/1")
+    return severity_model, yamnet
 
-with open("scaler_binary.pkl","rb") as f:
-    scaler_binary = pickle.load(f)
+@st.cache_resource
+def load_files():
+    with open("scaler.pkl","rb") as f:
+        scaler_sev = pickle.load(f)
+    with open("label_encoder.pkl","rb") as f:
+        enc_sev = pickle.load(f)
+    with open("prakriti_model.pkl","rb") as f:
+        prakriti_model = pickle.load(f)
+    return scaler_sev, enc_sev, prakriti_model
 
-with open("label_encoder_binary.pkl","rb") as f:
-    enc_binary = pickle.load(f)
+severity_model, yamnet = load_models()
+scaler_sev, enc_sev, prakriti_model = load_files()
 
-with open("scaler.pkl","rb") as f:
-    scaler_sev = pickle.load(f)
-
-with open("label_encoder.pkl","rb") as f:
-    enc_sev = pickle.load(f)
-
-with open("prakriti_model.pkl","rb") as f:
-    prakriti_model = pickle.load(f)
-
-yamnet = hub.load("https://tfhub.dev/google/yamnet/1")
-
-st.title("AI COPD & Ayurveda System")
+# ===============================
+# 🏥 UI
+# ===============================
+st.title("🫁 AI COPD & Ayurveda System")
 
 wav = st.file_uploader("Upload Lung Sound (.wav)")
 
-if wav:
+# ===============================
+# COPD SEVERITY
+# ===============================
+if wav is not None:
     y, sr = librosa.load(wav, sr=16000)
     waveform = tf.convert_to_tensor(y, dtype=tf.float32)
     _, emb, _ = yamnet(waveform)
     features = np.mean(emb.numpy(), axis=0).reshape(1,-1)
 
-    # COPD prediction
-    x = scaler_binary.transform(features)
-    p = binary_model.predict(x)[0][0]
-    copd = "COPD" if p>0.5 else "Healthy"
+    x2 = scaler_sev.transform(features)
+    pred = severity_model.predict(x2)[0]
+    sev = int(np.argmax(pred))
+    confidence = float(np.max(pred))
 
-    st.subheader("COPD Result")
-    st.write(copd)
+    sev_map = ["Mild","Moderate","Severe"]
 
-    if copd=="COPD":
-        # Severity
-        x2 = scaler_sev.transform(features)
-        pred = severity_model.predict(x2)[0]
-        sev = int(np.argmax(pred))
-        confidence = float(np.max(pred))
+    st.subheader("🫁 COPD Status")
+    st.write("**COPD Detected**")
 
-        sev_map = ["Mild","Moderate","Severe"]
+    st.subheader("📊 Severity")
+    st.write(sev_map[sev])
+    st.write(f"Confidence: {confidence*100:.1f}%")
 
-        st.subheader("COPD Status")
-        st.write("COPD Detected")
+    if confidence < 0.6:
+        st.warning("Low confidence – please re-record lung sound")
 
-        st.subheader("Severity")
-        st.write(sev_map[sev])
-        st.write(f"Confidence: {confidence*100:.1f}%")
+    st.session_state["copd_stage"] = sev
 
-if confidence < 0.60:
-    st.warning("Low confidence – re-record lung sound")
-
-
-
-st.subheader("Prakriti Questionnaire")
+# ===============================
+# PRAKRITI
+# ===============================
+st.subheader("🌿 Prakriti Questionnaire")
 
 questions = [
     "Dry skin", "Oily skin", "Thick skin",
@@ -117,19 +121,25 @@ if st.button("Analyze Prakriti"):
     X = np.array(user).astype(int).reshape(1,-1)
     probs = prakriti_model.predict_proba(X)[0]
 
-    st.subheader("Prakriti Result")
+    st.subheader("🧬 Prakriti Result")
     st.write(f"Vata: {probs[0]:.2f}")
     st.write(f"Pitta: {probs[1]:.2f}")
     st.write(f"Kapha: {probs[2]:.2f}")
 
     prak = ["Vata","Pitta","Kapha"][np.argmax(probs)]
     st.success(f"Your Prakriti: {prak}")
-if "copd_stage" in st.session_state:
-    plan = ayurveda_recommendation(prak, st.session_state["copd_stage"])
+
+    st.session_state["prakriti"] = prak
+
+# ===============================
+# AYURVEDA PLAN
+# ===============================
+if "prakriti" in st.session_state and "copd_stage" in st.session_state:
+    plan = ayurveda_recommendation(st.session_state["prakriti"], st.session_state["copd_stage"])
 
     st.subheader("🌿 Ayurvedic Treatment Plan")
 
     for k, v in plan.items():
         st.write(f"**{k}:**")
-        for item in v if isinstance(v,list) else [v]:
+        for item in v if isinstance(v, list) else [v]:
             st.write("•", item)

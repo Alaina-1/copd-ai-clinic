@@ -50,19 +50,18 @@ def ayurveda_recommendation(prakriti, copd_stage):
 @st.cache_resource
 def load_models():
     severity_model = tf.keras.models.load_model("copd_severity_model.h5")
+    binary_model = tf.keras.models.load_model("copd_yamnet_model.h5")
     yamnet = hub.load("https://tfhub.dev/google/yamnet/1")
-    return severity_model, yamnet
 
-@st.cache_resource
-def load_files():
-    with open("scaler.pkl","rb") as f:
+    with open("scaler (1).pkl","rb") as f:
         scaler = pickle.load(f)
-    with open("prakriti_model.pkl","rb") as f:
-        prakriti = pickle.load(f)
-    return scaler, prakriti
 
-severity_model, yamnet = load_models()
-scaler, prakriti_model = load_files()
+    with open("prakriti_model.pkl","rb") as f:
+        prakriti_model = pickle.load(f)
+
+    return severity_model, binary_model, yamnet, scaler, prakriti_model
+
+severity_model, binary_model, yamnet, scaler, prakriti_model = load_models()
 
 # ===============================
 # 🏥 UI
@@ -74,33 +73,38 @@ wav = st.file_uploader("Upload Lung Sound (.wav)")
 # ===============================
 # COPD ANALYSIS
 # ===============================
-if wav:
+if wav is not None:
+
     y, sr = librosa.load(wav, sr=16000)
     waveform = tf.convert_to_tensor(y, dtype=tf.float32)
     _, emb, _ = yamnet(waveform)
     features = np.mean(emb.numpy(), axis=0).reshape(1,-1)
 
-    X = scaler.transform(features)
-    pred = severity_model.predict(X)[0]
-    sev = int(np.argmax(pred))
-    confidence = float(np.max(pred))
-
-    sev_map = ["Mild", "Moderate", "Severe"]
+    # 1️⃣ Binary model
+    binary_prob = float(binary_model.predict(features)[0][0])
 
     st.subheader("🫁 Diagnosis")
 
-    if sev == 0 and confidence < 0.6:
+    if binary_prob < 0.5:
         st.success("Healthy lungs detected")
-        st.write(f"Confidence: {confidence*100:.1f}%")
+        st.write(f"Confidence: {(1-binary_prob)*100:.1f}%")
         st.session_state["copd_stage"] = None
+
     else:
         st.error("COPD Detected")
-        st.write("Severity:", sev_map[sev])
-        st.write(f"Confidence: {confidence*100:.1f}%")
-        st.session_state["copd_stage"] = sev
+        st.write(f"Confidence: {binary_prob*100:.1f}%")
 
-    if confidence < 0.6:
-        st.warning("Low confidence – please re-record lung sound")
+        # 2️⃣ Severity
+        X = scaler.transform(features)
+        sev_pred = severity_model.predict(X)[0]
+        sev = int(np.argmax(sev_pred))
+        sev_map = ["Mild", "Moderate", "Severe"]
+
+        st.subheader("📊 Severity")
+        st.write(sev_map[sev])
+        st.write(f"Confidence: {np.max(sev_pred)*100:.1f}%")
+
+        st.session_state["copd_stage"] = sev
 
 # ===============================
 # PRAKRITI

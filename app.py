@@ -5,6 +5,38 @@ import tensorflow as tf
 import pickle
 import tensorflow_hub as hub
 
+def ayurveda_recommendation(prakriti, copd_stage):
+
+    rec = {}
+
+    if "Kapha" in prakriti:
+        rec["Pranayama"] = ["Kapalbhati", "Bhastrika", "Diaphragmatic breathing"]
+    elif "Vata" in prakriti:
+        rec["Pranayama"] = ["Anulom Vilom", "Slow deep breathing"]
+    else:
+        rec["Pranayama"] = ["Diaphragmatic breathing", "Anulom Vilom"]
+
+    medicines = []
+    if "Kapha" in prakriti:
+        medicines += ["Pippali Rasayana", "Vyaghri Haritaki Avaleha"]
+    if "Vata" in prakriti:
+        medicines += ["Vasadi Kashaya", "Hareetakyadi Yoga"]
+
+    rec["Medicines"] = medicines
+
+    rec["Must Eat"] = ["Warm food", "Ginger", "Garlic", "Green gram", "Barley"]
+    rec["Avoid"] = ["Curd", "Milk", "Cold drinks", "Fried food", "Sweets", "Banana"]
+
+    if copd_stage <= 1:
+        rec["Panchakarma"] = ["Snehapana", "Virechana (if strong)"]
+    else:
+        rec["Panchakarma"] = ["Not advised in severe COPD"]
+
+    if copd_stage == 2:
+        rec["Warning"] = "Severe COPD — therapy only under medical supervision"
+
+    return rec
+
 # Load models
 binary_model = tf.keras.models.load_model("copd_binary_model.h5")
 severity_model = tf.keras.models.load_model("copd_severity_model.h5")
@@ -47,10 +79,12 @@ if wav:
     if copd=="COPD":
         # Severity
         x2 = scaler_sev.transform(features)
-        sev = np.argmax(severity_model.predict(x2))
+        sev = int(np.argmax(severity_model.predict(x2)))
         sev_map = ["Mild","Moderate","Severe"]
         st.subheader("Severity")
         st.write(sev_map[sev])
+        st.session_state["copd_stage"] = sev
+
 
 st.subheader("Prakriti Questionnaire")
 
@@ -79,3 +113,12 @@ if st.button("Analyze Prakriti"):
 
     prak = ["Vata","Pitta","Kapha"][np.argmax(probs)]
     st.success(f"Your Prakriti: {prak}")
+if "copd_stage" in st.session_state:
+    plan = ayurveda_recommendation(prak, st.session_state["copd_stage"])
+
+    st.subheader("🌿 Ayurvedic Treatment Plan")
+
+    for k, v in plan.items():
+        st.write(f"**{k}:**")
+        for item in v if isinstance(v,list) else [v]:
+            st.write("•", item)

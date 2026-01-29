@@ -79,11 +79,22 @@ if wav:
     if copd=="COPD":
         # Severity
         x2 = scaler_sev.transform(features)
-        sev = int(np.argmax(severity_model.predict(x2)))
+        pred = severity_model.predict(x2)[0]
+        sev = int(np.argmax(pred))
+        confidence = float(np.max(pred))
+
         sev_map = ["Mild","Moderate","Severe"]
+
+        st.subheader("COPD Status")
+        st.write("COPD Detected")
+
         st.subheader("Severity")
         st.write(sev_map[sev])
-        st.session_state["copd_stage"] = sev
+        st.write(f"Confidence: {confidence*100:.1f}%")
+
+if confidence < 0.60:
+    st.warning("Low confidence – re-record lung sound")
+
 
 
 st.subheader("Prakriti Questionnaire")

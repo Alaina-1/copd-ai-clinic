@@ -52,14 +52,30 @@ if wav:
         st.subheader("Severity")
         st.write(sev_map[sev])
 
-st.subheader("Prakriti Questions")
-answers = []
-for q in ["Dry skin","Oily skin","Heavy body","Cold","Hot","Fast movement"]:
-    answers.append(st.checkbox(q))
+st.subheader("Prakriti Questionnaire")
 
-if st.button("Analyze"):
-    X = np.array(answers).reshape(1,-1)
-    prak = prakriti_model.predict(X)[0]
-    prak_map=["Vata","Pitta","Kapha"]
-    st.subheader("Prakriti")
-    st.write(prak_map[prak])
+questions = [
+    "Dry skin", "Oily skin", "Thick skin",
+    "Feels cold", "Feels hot",
+    "Light body", "Heavy body",
+    "Irregular digestion", "Strong digestion", "Slow digestion",
+    "Light sleep", "Deep sleep",
+    "Anxious", "Intense", "Calm",
+    "Fast movement", "Slow movement"
+]
+
+user = []
+for q in questions:
+    user.append(st.checkbox(q))
+
+if st.button("Analyze Prakriti"):
+    X = np.array(user).astype(int).reshape(1,-1)
+    probs = prakriti_model.predict_proba(X)[0]
+
+    st.subheader("Prakriti Result")
+    st.write(f"Vata: {probs[0]:.2f}")
+    st.write(f"Pitta: {probs[1]:.2f}")
+    st.write(f"Kapha: {probs[2]:.2f}")
+
+    prak = ["Vata","Pitta","Kapha"][np.argmax(probs)]
+    st.success(f"Your Prakriti: {prak}")

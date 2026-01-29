@@ -16,10 +16,10 @@ def load_all():
     severity_model = tf.keras.models.load_model("copd_severity_model.h5")
     yamnet = hub.load("https://tfhub.dev/google/yamnet/1")
 
-    with open("yamnet_scaler.pkl","rb") as f:
-    scaler = pickle.load(f)
+    with open("yamnet_scaler.pkl", "rb") as f:
+        scaler = pickle.load(f)
 
-    with open("prakriti_model.pkl","rb") as f:
+    with open("prakriti_model.pkl", "rb") as f:
         prakriti_model = pickle.load(f)
 
     return binary_model, severity_model, yamnet, scaler, prakriti_model
@@ -73,15 +73,15 @@ if wav is not None:
     _, emb, _ = yamnet(waveform)
     features = np.mean(emb.numpy(), axis=0)
 
-    # 🔥 Match exactly what scaler expects
+    # Match exactly what the scaler expects
     n = scaler.n_features_in_
-    features = features[:n].reshape(1,-1)
+    features = features[:n].reshape(1, -1)
 
     # Scale
     X = scaler.transform(features)
 
     # ------------------------------
-    # Binary COPD
+    # Binary COPD detection
     # ------------------------------
     prob = float(binary_model.predict(X)[0][0])
 
@@ -89,11 +89,11 @@ if wav is not None:
 
     if prob < 0.5:
         st.success("Healthy Lungs Detected")
-        st.write(f"Confidence: {(1-prob)*100:.1f}%")
+        st.write(f"Confidence: {(1 - prob) * 100:.1f}%")
         stage = None
     else:
         st.error("COPD Detected")
-        st.write(f"Confidence: {prob*100:.1f}%")
+        st.write(f"Confidence: {prob * 100:.1f}%")
 
         # ------------------------------
         # Severity
@@ -104,7 +104,7 @@ if wav is not None:
 
         st.subheader("📊 Severity")
         st.write(sev_map[stage])
-        st.write(f"Confidence: {np.max(sev_pred)*100:.1f}%")
+        st.write(f"Confidence: {np.max(sev_pred) * 100:.1f}%")
 
     st.session_state["stage"] = stage
 
@@ -126,9 +126,9 @@ questions = [
 user = [st.checkbox(q) for q in questions]
 
 if st.button("Analyze Prakriti"):
-    Xp = np.array(user).astype(int).reshape(1,-1)
+    Xp = np.array(user).astype(int).reshape(1, -1)
     probs = prakriti_model.predict_proba(Xp)[0]
-    prakriti = ["Vata","Pitta","Kapha"][np.argmax(probs)]
+    prakriti = ["Vata", "Pitta", "Kapha"][np.argmax(probs)]
 
     st.success(f"Your Prakriti: {prakriti}")
     st.session_state["prakriti"] = prakriti
@@ -139,5 +139,5 @@ if st.button("Analyze Prakriti"):
 if "prakriti" in st.session_state and "stage" in st.session_state:
     plan = ayurveda_recommendation(st.session_state["prakriti"], st.session_state["stage"])
     st.subheader("🌿 Ayurvedic Plan")
-    for k,v in plan.items():
+    for k, v in plan.items():
         st.write(f"**{k}:** {v}")

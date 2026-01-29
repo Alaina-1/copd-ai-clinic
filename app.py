@@ -16,8 +16,8 @@ def load_all():
     severity_model = tf.keras.models.load_model("copd_severity_model.h5")
     yamnet = hub.load("https://tfhub.dev/google/yamnet/1")
 
-    with open("scaler (1).pkl","rb") as f:
-        scaler = pickle.load(f)
+    with open("yamnet_scaler.pkl","rb") as f:
+    scaler = pickle.load(f)
 
     with open("prakriti_model.pkl","rb") as f:
         prakriti_model = pickle.load(f)

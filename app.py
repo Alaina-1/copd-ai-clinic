@@ -6,15 +6,12 @@ import pickle
 import tensorflow_hub as hub
 
 st.set_page_config(page_title="AYURON", layout="centered")
-st.write("Scaler expects:", scaler.n_features_in_)
-st.write("Binary model expects:", binary_model.input_shape[1])
 
-# -------------------------------
-# Load Models
-# -------------------------------
+# ===============================
+# Load all models & files
+# ===============================
 @st.cache_resource
 def load_all():
-
     binary_model = tf.keras.models.load_model("copd_yamnet_model.h5")
     severity_model = tf.keras.models.load_model("copd_severity_model.h5")
     yamnet = hub.load("https://tfhub.dev/google/yamnet/1")
@@ -29,11 +26,12 @@ def load_all():
 
 binary_model, severity_model, yamnet, scaler, prakriti_model = load_all()
 
-# -------------------------------
-# Ayurveda Logic
-# -------------------------------
+# ===============================
+# Ayurveda logic
+# ===============================
 def ayurveda_recommendation(prakriti, stage):
     rec = {}
+
     if prakriti == "Kapha":
         rec["Pranayama"] = ["Kapalbhati", "Bhastrika"]
         rec["Medicines"] = ["Pippali Rasayana", "Vyaghri Haritaki"]
@@ -44,7 +42,7 @@ def ayurveda_recommendation(prakriti, stage):
         rec["Pranayama"] = ["Cooling Breathing"]
         rec["Medicines"] = ["Guduchi"]
 
-    if stage == None:
+    if stage is None:
         rec["Status"] = "Healthy Lungs"
     elif stage == 0:
         rec["Stage"] = "Mild COPD"
@@ -55,31 +53,39 @@ def ayurveda_recommendation(prakriti, stage):
 
     return rec
 
-# -------------------------------
+# ===============================
 # UI
-# -------------------------------
+# ===============================
 st.title("🌿 AYURON – AI COPD & Ayurveda")
 
-wav = st.file_uploader("Upload lung sound (.wav)")
+wav = st.file_uploader("Upload Lung Sound (.wav)", type=["wav"])
 
-if wav:
+# ===============================
+# Lung Analysis
+# ===============================
+if wav is not None:
+
+    # Load and convert audio
     y, sr = librosa.load(wav, sr=16000)
     waveform = tf.convert_to_tensor(y, dtype=tf.float32)
 
+    # YAMNet features
     _, emb, _ = yamnet(waveform)
     features = np.mean(emb.numpy(), axis=0)
 
-    # 🔥 Resize to model input size
-    needed = binary_model.input_shape[1]
-    features = features[:needed].reshape(1,-1)
+    # 🔥 Match exactly what scaler expects
+    n = scaler.n_features_in_
+    features = features[:n].reshape(1,-1)
 
-    # 🔥 Scale
+    # Scale
     X = scaler.transform(features)
 
-    # -------------------------------
+    # ------------------------------
     # Binary COPD
-    # -------------------------------
+    # ------------------------------
     prob = float(binary_model.predict(X)[0][0])
+
+    st.subheader("🫁 Diagnosis")
 
     if prob < 0.5:
         st.success("Healthy Lungs Detected")
@@ -89,20 +95,22 @@ if wav:
         st.error("COPD Detected")
         st.write(f"Confidence: {prob*100:.1f}%")
 
-        # -------------------------------
+        # ------------------------------
         # Severity
-        # -------------------------------
+        # ------------------------------
         sev_pred = severity_model.predict(X)[0]
         stage = int(np.argmax(sev_pred))
         sev_map = ["Mild", "Moderate", "Severe"]
-        st.subheader("Severity")
+
+        st.subheader("📊 Severity")
         st.write(sev_map[stage])
+        st.write(f"Confidence: {np.max(sev_pred)*100:.1f}%")
 
     st.session_state["stage"] = stage
 
-# -------------------------------
-# Prakriti
-# -------------------------------
+# ===============================
+# Prakriti Questionnaire
+# ===============================
 st.subheader("🌿 Prakriti Questionnaire")
 
 questions = [
@@ -125,9 +133,9 @@ if st.button("Analyze Prakriti"):
     st.success(f"Your Prakriti: {prakriti}")
     st.session_state["prakriti"] = prakriti
 
-# -------------------------------
+# ===============================
 # Ayurveda Output
-# -------------------------------
+# ===============================
 if "prakriti" in st.session_state and "stage" in st.session_state:
     plan = ayurveda_recommendation(st.session_state["prakriti"], st.session_state["stage"])
     st.subheader("🌿 Ayurvedic Plan")

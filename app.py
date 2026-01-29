@@ -5,12 +5,13 @@ import tensorflow as tf
 import pickle
 import tensorflow_hub as hub
 
-st.set_page_config(page_title="AI COPD & Ayurveda", layout="centered")
+st.set_page_config(page_title="AYURON", layout="centered")
 
 # ===============================
 # 🌿 AYURVEDA ENGINE
 # ===============================
 def ayurveda_recommendation(prakriti, copd_stage):
+
     rec = {}
 
     if "Kapha" in prakriti:
@@ -31,18 +32,20 @@ def ayurveda_recommendation(prakriti, copd_stage):
     rec["Must Eat"] = ["Warm food", "Ginger", "Garlic", "Green gram", "Barley"]
     rec["Avoid"] = ["Curd", "Milk", "Cold drinks", "Fried food", "Sweets", "Banana"]
 
-    if copd_stage <= 1:
-        rec["Panchakarma"] = ["Snehapana", "Virechana (if strong)"]
+    if copd_stage is None:
+        rec["Status"] = "Healthy lungs detected"
+    elif copd_stage <= 1:
+        rec["Panchakarma"] = ["Snehapana", "Virechana"]
     else:
         rec["Panchakarma"] = ["Not advised in severe COPD"]
 
     if copd_stage == 2:
-        rec["Warning"] = "Severe COPD — therapy only under medical supervision"
+        rec["Warning"] = "Severe COPD — consult doctor before therapy"
 
     return rec
 
 # ===============================
-# 🧠 LOAD MODELS (CACHED)
+# 🧠 LOAD MODELS
 # ===============================
 @st.cache_resource
 def load_models():
@@ -53,59 +56,51 @@ def load_models():
 @st.cache_resource
 def load_files():
     with open("scaler.pkl","rb") as f:
-        scaler_sev = pickle.load(f)
-    with open("label_encoder.pkl","rb") as f:
-        enc_sev = pickle.load(f)
+        scaler = pickle.load(f)
     with open("prakriti_model.pkl","rb") as f:
-        prakriti_model = pickle.load(f)
-    return scaler_sev, enc_sev, prakriti_model
+        prakriti = pickle.load(f)
+    return scaler, prakriti
 
 severity_model, yamnet = load_models()
-scaler_sev, enc_sev, prakriti_model = load_files()
+scaler, prakriti_model = load_files()
 
 # ===============================
 # 🏥 UI
 # ===============================
-st.title("🫁 AI COPD & Ayurveda System")
+st.title("🫁 AYURON – AI COPD & Ayurveda")
 
 wav = st.file_uploader("Upload Lung Sound (.wav)")
 
 # ===============================
-# COPD SEVERITY
+# COPD ANALYSIS
 # ===============================
-if wav is not None:
+if wav:
     y, sr = librosa.load(wav, sr=16000)
     waveform = tf.convert_to_tensor(y, dtype=tf.float32)
     _, emb, _ = yamnet(waveform)
     features = np.mean(emb.numpy(), axis=0).reshape(1,-1)
 
-    x2 = scaler_sev.transform(features)
-    pred = severity_model.predict(x2)[0]
+    X = scaler.transform(features)
+    pred = severity_model.predict(X)[0]
     sev = int(np.argmax(pred))
     confidence = float(np.max(pred))
 
-    sev_map = ["Mild","Moderate","Severe"]
+    sev_map = ["Mild", "Moderate", "Severe"]
 
-   st.subheader("🫁 Diagnosis")
+    st.subheader("🫁 Diagnosis")
 
     if sev == 0 and confidence < 0.6:
         st.success("Healthy lungs detected")
-        st.write("No significant COPD pattern found")
         st.write(f"Confidence: {confidence*100:.1f}%")
         st.session_state["copd_stage"] = None
-
     else:
         st.error("COPD Detected")
-        st.subheader("📊 Severity")
-        st.write(sev_map[sev])
+        st.write("Severity:", sev_map[sev])
         st.write(f"Confidence: {confidence*100:.1f}%")
         st.session_state["copd_stage"] = sev
 
-
     if confidence < 0.6:
         st.warning("Low confidence – please re-record lung sound")
-
-    st.session_state["copd_stage"] = sev
 
 # ===============================
 # PRAKRITI
@@ -122,33 +117,37 @@ questions = [
     "Fast movement", "Slow movement"
 ]
 
-user = []
-for q in questions:
-    user.append(st.checkbox(q))
+user = [st.checkbox(q) for q in questions]
 
 if st.button("Analyze Prakriti"):
     X = np.array(user).astype(int).reshape(1,-1)
     probs = prakriti_model.predict_proba(X)[0]
 
     st.subheader("🧬 Prakriti Result")
-    st.write(f"Vata: {probs[0]:.2f}")
-    st.write(f"Pitta: {probs[1]:.2f}")
-    st.write(f"Kapha: {probs[2]:.2f}")
+    st.write("Vata:", round(probs[0],2))
+    st.write("Pitta:", round(probs[1],2))
+    st.write("Kapha:", round(probs[2],2))
 
-    prak = ["Vata","Pitta","Kapha"][np.argmax(probs)]
-    st.success(f"Your Prakriti: {prak}")
-
-    st.session_state["prakriti"] = prak
+    prakriti = ["Vata","Pitta","Kapha"][np.argmax(probs)]
+    st.success(f"Your Prakriti: {prakriti}")
+    st.session_state["prakriti"] = prakriti
 
 # ===============================
 # AYURVEDA PLAN
 # ===============================
 if "prakriti" in st.session_state and "copd_stage" in st.session_state:
-    plan = ayurveda_recommendation(st.session_state["prakriti"], st.session_state["copd_stage"])
+
+    plan = ayurveda_recommendation(
+        st.session_state["prakriti"],
+        st.session_state["copd_stage"]
+    )
 
     st.subheader("🌿 Ayurvedic Treatment Plan")
 
     for k, v in plan.items():
         st.write(f"**{k}:**")
-        for item in v if isinstance(v, list) else [v]:
-            st.write("•", item)
+        if isinstance(v, list):
+            for item in v:
+                st.write("•", item)
+        else:
+            st.write(v)
